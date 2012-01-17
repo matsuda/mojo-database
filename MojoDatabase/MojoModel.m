@@ -154,7 +154,7 @@ static NSMutableDictionary *tableCache = nil;
 	
 	NSMutableArray *arguments = [NSMutableArray array];
 	id argument;
-	while (argument = va_arg(argumentList, id)) {
+	while ( (argument = va_arg(argumentList, id)) ) {
 		[arguments addObject:argument];
 	}
 	
