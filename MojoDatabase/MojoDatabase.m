@@ -7,17 +7,21 @@
 //
 
 #import "MojoDatabase.h"
+#import <objc/runtime.h>
 
 @interface MojoDatabase(PrivateMethods)
 -(void)open;
 -(void)raiseSqliteException:(NSString *)errorMessage;
 -(NSArray *)columnNamesForStatement:(sqlite3_stmt *)statement;
 -(NSArray *)columnTypesForStatement:(sqlite3_stmt *)statement;
--(void)copyValuesFromStatement:(sqlite3_stmt *)statement toRow:(id)row queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes columnNames:(NSArray *)columnNames;
+-(NSArray *)ivarTypesForClass:(Class)rowClass;
+//-(void)copyValuesFromStatement:(sqlite3_stmt *)statement toRow:(id)row queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes columnNames:(NSArray *)columnNames;
+-(void)copyValuesFromStatement:(sqlite3_stmt *)statement toRow:(id)row queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes columnNames:(NSArray *)columnNames ivarTypes:(NSArray *)ivarTypes;
 -(int)columnTypeToInt:(NSString *)columnType;
 -(int)typeForStatement:(sqlite3_stmt *)statement column:(int)column;
 -(void)copyValuesFromStatement:(sqlite3_stmt *)statement;
--(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes;
+//-(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes;
+-(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes ivarTypes:(NSArray *)ivarTypes;
 -(NSArray *)tables;
 -(void)bindArguments:(NSArray *)arguments toStatement:(sqlite3_stmt *)statement queryInfo:(NSDictionary *)queryInfo;
 @end
@@ -71,16 +75,19 @@
 		BOOL needsToFetchColumnTypesAndNames = YES;
 		NSArray *columnTypes = nil;
 		NSArray *columnNames = nil;
+		NSArray *ivarTypes = nil;
 
 		while (sqlite3_step(statement) == SQLITE_ROW) {
 			if (needsToFetchColumnTypesAndNames) {
 				columnTypes = [self columnTypesForStatement:statement];
 				columnNames = [self columnNamesForStatement:statement];
+                ivarTypes = [self ivarTypesForClass:rowClass];
 				needsToFetchColumnTypesAndNames = NO;
 			}
 			
 			id row = [[rowClass alloc] init];
-			[self copyValuesFromStatement:statement toRow:row queryInfo:queryInfo columnTypes:columnTypes columnNames:columnNames];
+//			[self copyValuesFromStatement:statement toRow:row queryInfo:queryInfo columnTypes:columnTypes columnNames:columnNames];
+			[self copyValuesFromStatement:statement toRow:row queryInfo:queryInfo columnTypes:columnTypes columnNames:columnNames ivarTypes:ivarTypes];
 			[rows addObject:row];
 			[row release];
 		}
@@ -186,6 +193,20 @@
 	return columnTypes;
 }
 
+-(NSArray *)ivarTypesForClass:(Class)rowClass {
+    unsigned int ivarCount = 0;
+    Ivar *ivars = class_copyIvarList(rowClass, &ivarCount);
+    NSMutableArray *ivarTypes = [NSMutableArray array];
+    for(int i = 0; i < ivarCount; i++) {
+        const char *type = ivar_getTypeEncoding(ivars[i]);
+        NSString *ivarType = [NSString stringWithCString:type encoding:NSUTF8StringEncoding];
+        NSLog(@"type >>> %@", ivarType);
+        [ivarTypes addObject:ivarType];
+    }
+    free(ivars);
+    return ivarTypes;
+}
+
 -(int)typeForStatement:(sqlite3_stmt *)statement column:(int)column {
 	const char* columnType = sqlite3_column_decltype(statement, column);
 	
@@ -211,16 +232,34 @@
 	return SQLITE_TEXT;
 }
 
+//-(void)copyValuesFromStatement:(sqlite3_stmt *)statement 
+//						 toRow:(id)row 
+//					 queryInfo:(NSDictionary *)queryInfo 
+//				   columnTypes:(NSArray *)columnTypes 
+//				   columnNames:(NSArray *)columnNames {
+//
+//	int columnCount = sqlite3_column_count(statement);
+//	
+//	for (int i=0; i<columnCount; i++) {
+//		id value = [self valueFromStatement:statement column:i queryInfo:queryInfo columnTypes:columnTypes];
+//		
+//		if (value != nil) {
+//			[row setValue:value forKey:[columnNames objectAtIndex:i]];
+//		}
+//	}
+//}
+
 -(void)copyValuesFromStatement:(sqlite3_stmt *)statement 
 						 toRow:(id)row 
 					 queryInfo:(NSDictionary *)queryInfo 
 				   columnTypes:(NSArray *)columnTypes 
-				   columnNames:(NSArray *)columnNames {
-
+				   columnNames:(NSArray *)columnNames
+                     ivarTypes:(NSArray *)ivarTypes {
+    
 	int columnCount = sqlite3_column_count(statement);
-	
+
 	for (int i=0; i<columnCount; i++) {
-		id value = [self valueFromStatement:statement column:i queryInfo:queryInfo columnTypes:columnTypes];
+		id value = [self valueFromStatement:statement column:i queryInfo:queryInfo columnTypes:columnTypes ivarTypes:ivarTypes];
 		
 		if (value != nil) {
 			[row setValue:value forKey:[columnNames objectAtIndex:i]];
@@ -228,9 +267,38 @@
 	}
 }
 
+//-(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes {
+//	int columnType = [[columnTypes objectAtIndex:column] intValue];
+//	
+//	/*
+//	 * force conversion to the declared type using sql conversions; this saves
+//	 * some problems with NSNull being assigned to non-object values
+//	 */
+//	if (columnType == SQLITE_INTEGER) {
+//		return [NSNumber numberWithInt:sqlite3_column_int(statement, column)];
+//	} else if (columnType == SQLITE_FLOAT) {
+//		return [NSNumber numberWithDouble:sqlite3_column_double(statement, column)];
+//	} else if (columnType == SQLITE_TEXT) {
+//		const char* text = (const char *) sqlite3_column_text(statement, column);
+//		if (text != nil) {
+//			return [NSString stringWithUTF8String:text];
+//		} else {
+//			return nil;
+//		}
+//	} else if (columnType == SQLITE_BLOB) {
+//		// create an NSData object with the same size as the blob
+//		return [NSData dataWithBytes:sqlite3_column_blob(statement, column) length:sqlite3_column_bytes(statement, column)];
+//	} else if (columnType == SQLITE_NULL) {
+//		return nil;
+//	}
+//	
+//	NSLog(@"Unrecognized SQL column type: %i for sql %@", columnType, [queryInfo objectForKey:@"sql"]);
+//	return nil;
+//}
+
 -(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes {
 	int columnType = [[columnTypes objectAtIndex:column] intValue];
-	
+
 	/*
 	 * force conversion to the declared type using sql conversions; this saves
 	 * some problems with NSNull being assigned to non-object values
@@ -238,7 +306,16 @@
 	if (columnType == SQLITE_INTEGER) {
 		return [NSNumber numberWithInt:sqlite3_column_int(statement, column)];
 	} else if (columnType == SQLITE_FLOAT) {
-		return [NSNumber numberWithDouble:sqlite3_column_double(statement, column)];
+        NSString *ivarType = nil;
+        if ([ivarTypes count] != 0 && [ivarTypes count] >= column) {
+            ivarType = [ivarTypes objectAtIndex:column - 1];
+        }
+        NSRange range = [ivarType rangeOfString:@"NSDate"];
+        if (ivarType && range.location != NSNotFound) {
+            return [NSDate dateWithTimeIntervalSince1970:sqlite3_column_double(statement, column)];
+        } else {
+            return [NSNumber numberWithDouble:sqlite3_column_double(statement, column)];
+        }
 	} else if (columnType == SQLITE_TEXT) {
 		const char* text = (const char *) sqlite3_column_text(statement, column);
 		if (text != nil) {
@@ -252,7 +329,7 @@
 	} else if (columnType == SQLITE_NULL) {
 		return nil;
 	}
-	
+
 	NSLog(@"Unrecognized SQL column type: %i for sql %@", columnType, [queryInfo objectForKey:@"sql"]);
 	return nil;
 }
