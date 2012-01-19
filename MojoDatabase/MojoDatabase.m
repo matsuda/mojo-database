@@ -296,7 +296,7 @@
 //	return nil;
 //}
 
--(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes {
+-(id)valueFromStatement:(sqlite3_stmt *)statement column:(int)column queryInfo:(NSDictionary *)queryInfo columnTypes:(NSArray *)columnTypes ivarTypes:(NSArray *)ivarTypes {
 	int columnType = [[columnTypes objectAtIndex:column] intValue];
 
 	/*
