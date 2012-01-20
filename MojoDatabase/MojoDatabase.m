@@ -200,7 +200,6 @@
     for(int i = 0; i < ivarCount; i++) {
         const char *type = ivar_getTypeEncoding(ivars[i]);
         NSString *ivarType = [NSString stringWithCString:type encoding:NSUTF8StringEncoding];
-        NSLog(@"type >>> %@", ivarType);
         [ivarTypes addObject:ivarType];
     }
     free(ivars);
