@@ -35,5 +35,6 @@
 +(id)find:(NSUInteger)primaryKey;
 +(NSArray *)findAll;
 +(void)deleteAll;
-	
++(NSString *)tableName;
+
 @end
