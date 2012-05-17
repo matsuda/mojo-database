@@ -37,4 +37,14 @@
 +(void)deleteAll;
 +(NSString *)tableName;
 
+/*
+ */
++(NSInteger)count;
++(NSArray *)insertCollection:(NSArray *)collection
+                  assignment:(void(^)(id obj, id attributes))assignment
+                     success:(void(^)(id obj, id attributes))success
+                     failure:(BOOL(^)(void))failure;
+
+-(NSArray *)propertyValues;
+
 @end

@@ -30,5 +30,15 @@
 -(void)rollback;
 -(NSArray *)columnsForTableName:(NSString *)tableName;
 -(NSUInteger)lastInsertRowId;
+/*
+ */
+-(sqlite3 *)sqlite3Database;
+
+-(NSArray *)executeInsertSql:(NSString *)sql
+             withCollections:(NSArray *)collections
+             withClassForRow:(Class)rowClass
+                  assignment:(void(^)(id obj, id attributes))assignment
+                     success:(void(^)(id obj, id attributes))success
+                     failure:(BOOL(^)(void))failure;
 
 @end
