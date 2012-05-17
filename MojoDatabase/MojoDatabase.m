@@ -50,6 +50,11 @@
 	return [self initWithPath:[documentsDirectory stringByAppendingPathComponent:fileName]];
 }
 
+-(sqlite3 *)sqlite3Database
+{
+    return database;
+}
+
 #pragma mark - SQLite Methods
 
 -(NSArray *)executeSql:(NSString *)sql withParameters:(NSArray *)parameters withClassForRow:(Class )rowClass {
@@ -120,6 +125,75 @@
 	
 	va_end(argumentList);
 	return [self executeSql:sql withParameters:arguments];
+}
+
+-(NSArray *)executeInsertSql:(NSString *)sql
+             withCollections:(NSArray *)collections
+             withClassForRow:(Class)rowClass
+                  assignment:(void(^)(id obj, id attributes))assignment
+                     success:(void(^)(id obj, id attributes))success
+                     failure:(BOOL(^)(void))failure;
+{
+	NSMutableDictionary *queryInfo = [NSMutableDictionary dictionary];
+	[queryInfo setObject:sql forKey:@"sql"];
+
+    NSArray *parameters = nil;
+	NSMutableArray *rows = [NSMutableArray array];
+
+	if (logging) {
+		NSLog(@"SQL: %@ \n parameters: %@", sql, parameters);
+	}
+
+	sqlite3_stmt * statement = nil;
+
+    @try {
+        if (sqlite3_prepare_v2(database, [sql UTF8String], -1, &statement, NULL) == SQLITE_OK) {
+
+            for (id res in collections) {
+                id row = [[rowClass alloc] init];
+                [rows addObject:row];
+
+                sqlite3_reset(statement);
+                sqlite3_clear_bindings(statement);
+
+                if (assignment) {
+                    assignment(row, res);
+                    parameters = [row propertyValues];
+                }
+                if (parameters == nil) {
+                    parameters = [NSArray array];
+                }
+                // Now add the parameters to queryInfo
+                [queryInfo setObject:parameters forKey:@"parameters"];
+                [self bindArguments:parameters toStatement:statement queryInfo:queryInfo];
+
+                if (sqlite3_step(statement) == SQLITE_DONE) {
+                    if (success) {
+                        success(row, res);
+                    }
+                } else {
+                    if (failure) {
+                        if (failure()) {
+                            [row release];
+                            [self raiseSqliteException:[[NSString stringWithFormat:@"Failed to execute statement: '%@', parameters: '%@' with message: ", sql, parameters] stringByAppendingString:@"%S"]];
+                            break;
+                        }
+                    }
+                }
+                [row release];
+            }
+        } else {
+            [self raiseSqliteException:[[NSString stringWithFormat:@"Failed to execute statement: '%@', parameters: '%@' with message: ", sql, parameters] stringByAppendingString:@"%S"]];
+        }
+    }
+    @catch (NSException *exception) {
+        @throw exception;
+    }
+    @finally {
+        sqlite3_finalize(statement);
+    }
+
+    return rows;
 }
 
 -(void) close {

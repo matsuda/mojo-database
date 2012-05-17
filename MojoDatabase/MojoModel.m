@@ -8,6 +8,7 @@
 
 #import "MojoModel.h"
 #import "MojoDatabase.h"
+#import "NSString+MojoDatabase.h"
 
 static MojoDatabase *database = nil;
 static NSMutableDictionary *tableCache = nil;
@@ -41,32 +42,41 @@ static NSMutableDictionary *tableCache = nil;
 #pragma mark - Class Methods - General
 
 +(NSString *)tableName {
-	return NSStringFromClass([self class]);
+    NSString *tName = NSStringFromClass([self class]);
+    return [tName pluralizeString];
 }
 
 
-#pragma mark - DB Methods
-
--(NSArray *)columns {
++(NSArray *)columns {
 	if (tableCache == nil) {
 		tableCache = [[NSMutableDictionary dictionary] retain];
 	}
-	
-	NSString *tableName = [[self class] tableName];
+
+	NSString *tableName = [self tableName];
 	NSArray *columns = [tableCache objectForKey:tableName];
-	
+
 	if (columns == nil) {
 		columns = [database columnsForTableName:tableName];
 		[tableCache setObject:columns forKey:tableName];
 	}
-	
+
 	return columns;
 }
 
--(NSArray *)columnsWithoutPrimaryKey {
++(NSArray *)columnsWithoutPrimaryKey {
 	NSMutableArray *columns = [NSMutableArray arrayWithArray:[self columns]];
 	[columns removeObjectAtIndex:0];
 	return columns;
+}
+
+#pragma mark - DB Methods
+
+-(NSArray *)columns {
+    return [[self class] columns];
+}
+
+-(NSArray *)columnsWithoutPrimaryKey {
+    return [[self class] columnsWithoutPrimaryKey];
 }
 
 -(NSArray *)propertyValues {
@@ -203,6 +213,46 @@ static NSMutableDictionary *tableCache = nil;
 -(void)beforeSave {}
 -(void)afterSave {}
 -(void)beforeDelete {}
+
+/*
+ */
++(NSInteger)count
+{
+    NSString* sql = [NSString stringWithFormat:@"SELECT COUNT() FROM %@", [self tableName]];
+    NSArray *results = [[self database] executeSqlWithParameters:sql, nil];
+    if (![results count]) return 0;
+
+    NSDictionary* result = [results objectAtIndex:0];
+    return [[result objectForKey:@"COUNT()"] intValue];
+}
+
++(NSArray *)insertCollection:(NSArray *)collection
+                  assignment:(void(^)(id obj, id attributes))assignment
+                     success:(void(^)(id obj, id attributes))success
+                     failure:(BOOL(^)(void))failure
+{
+	NSMutableArray *parameterList = [NSMutableArray array];
+	NSArray *columnsWithoutPrimaryKey = [self columnsWithoutPrimaryKey];
+
+	for (int i=0; i<[columnsWithoutPrimaryKey count]; i++) {
+		[parameterList addObject:@"?"];
+	}
+
+	NSString *sql = [NSString stringWithFormat:@"INSERT INTO %@ (%@) values(%@)", [self tableName], [columnsWithoutPrimaryKey componentsJoinedByString:@","], [parameterList componentsJoinedByString:@","]];
+    NSArray *results = [[self database] executeInsertSql:sql
+                                         withCollections:collection
+                                         withClassForRow:[self class]
+                                              assignment:^(id obj, id res) {
+                                                  if (assignment) {
+                                                      assignment(obj, res);
+                                                  }
+                                              } success:^(MojoModel *model, id res) {
+                                                  if (success) {
+                                                      success(model, res);
+                                                  }
+                                              } failure:failure];
+    return results;
+}
 
 
 #pragma mark -
