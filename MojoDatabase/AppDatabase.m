@@ -37,8 +37,8 @@ NSString *const kDatabaseName = @"MojoDatabase.sqlite3";
 	if (!self) { return nil; }
 
 	[self setLogging:loggingEnabled];
+    [MojoModel setDatabase:self];
 	[self runMigrations];
-	[MojoModel setDatabase:self];
 
 	return self;
 }
